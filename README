@@ -1,0 +1,92 @@
+Requirements:
+=============
+SNOwGLoBES to make the grids and test spectra (located in some directory SNOWGLOBES)
+ROOT
+
+Creating grid information files:
+================================
+Use GenerateForwardFittingGrid.C to create files that define your grid and all the elements in that grid. Use the "pinched info" file and SNOwGLoBES to create flux files and energy spectra for the grid. The "pinched info" and "grid info" files are used by the scripts in the code directories to help produce plots. 
+
+How to make grids:
+==================
+Make grids using SNOwGLoBES and the scripts located in the SNOWGLOBES/fluxes directory. Use pinched.cc to generate the flux files for the grid:
+
+1. Make sure that the file pinched_info.dat exists in the directory 
+2. Set the output directory for your flux files: OUTFLUXDIR=/path/to/output/directory 
+3. Compile pinched.C by doing g++ -o outputname pinched.cc supernova_mixing.cc 
+	1. supernova_mixing.cc contains functions that pinched.cc uses
+4. Run the executable by typing ./outputname 
+5. If you would like to specify a value of theta12 to include mass oscillation effects, you will need to also define directories "nh" and "ih" for the different mass orderings in OUTFLUXDIR 
+	1. Run the executable by doing ./outputname ## where ## represents the theta12 value you would like to use (example: 0.588366)
+ 
+Use run_pinched.pl to generate the energy spectra for this grid. Copy run_pinched.pl from the fluxes directory into SNOWGLOBES as it needs to run from the main directory.
+
+Usage: ./run_pinched.pl influxdir outdir
+
+influxdir: where the flux files are located, or OUTFLUXDIR
+outdir: where you would like the energy spectra files to be located
+
+Some notes about this script:
+- The script deletes the flux files from the $SNOWGLOBES/fluxes directory
+- The script deletes the event rates files from the $SNOWGLOBES/out directory 
+
+Input directory:
+================
+The grid_info directory contains information about the grid of spectra you'd like to use. The file names should be formatted like grid_info_GRIDNAME.dat. Each file contains one line per file defining the grid like so:
+
+	min_alpha max_alpha step_alpha min_e0 max_e0 step_e0 min_lum max_lum step_lum 
+
+The pinched_info directory contains files with (alpha, e0, lum) information for every element in the grid. The file names should be formatted like pinched_info_GRIDNAME.dat. The files will contain lines formatted in the following way:
+
+	element alpha_nue alpha_nuebar alpha_nux e0_nue e0_nuebar e0_nux lum_nue lum_nuebar lum_nux 
+
+The energy spectra grids should be located in this directory under a common GRIDNAME sub-directory. The scripts will search for a grid element's energy spectra in a directory formatted like input/GRIDNAME/smear_SMEARING_XSCN_EFFIC, where 
+- SMEARING: what type of smearing you used in SNOwGLoBES 
+- XSCN: what nue-Ar40 cross section model you used in SNOwGLoBES 
+- EFFIC: what efficiency file you used in SNOwGLoBES (e.g., StepEffic for a 100% efficiency above a 5 MeV threshold)
+
+The test_spectra directory contains the SNOwGLoBES event rate files for the test spectra (i.e., SNOwGLoBES spectra with the true flux parameters). The file names should be formatted like pinched_test_smeared_sum_SMEARING_XSCN_EFFIC.dat, where SMEARING, XSCN, and EFFIC were defined previously in this README.
+
+The reference_areas directory contains files with "reference" contour area values to normalize the contour area figure of merit. The reference areas have typically been calculated for perfect reconstruction (no smearing). The files in this directory should be formatted like referencearea_GRIDNAME_smear0.00MARLEY_XSCN_EFFIC_spectra0.00MARLEY_XSCN_EFFIC_DISTkpc.dat where DIST is the supernova distance. The files will contain one line formatted in the following way:
+
+	refarea_alphavse0 refarea_lumvse0 refarea_lumvsalpha 
+
+Where the three values correspond to the contour area for the counter in (alpha, e0), (luminosity, e0), and (luminosity, alpha) spaces. 
+
+If you would like to compare contours to flux parameters to other SN databases via code_plot/SuperimposeDifferentAsimovPlots_ComparingModels, store the flux parameters in the DifferentModels directory. 
+
+Header scripts:
+===============
+The headers directory contains the headers with functions used by other scripts in this repository. The functions are split into three separate files: functions specific to the Asimov method, functions specific to the "fake supernova" method, and functions used by both methods. 
+
+Plotting scripts:
+=================
+The code_plot directory contains plotting scripts for both the Asimov and fake supernova methods. There are also scripts to plot test spectra. These scripts should search for files in the out directory, potentially even searching for sub-directories depending on the study. Run scripts from the main directory, for example
+	root -l code_plot/PlotBestFitElement.C
+
+Asimov method:
+==============
+The forward fitting algorithm requires a SNOwGLoBES binned energy spectrum for a supernova at a given distance and a "true" set of pinched-thermal parameters (alpha, e0, luminosity). The algorithm uses this spectrum as a "test spectrum" to compare against a grid of energy spectra generated with many different combinations of (alpha, e0, luminosity).
+
+A test spectrum input into the forward fitting algorithm produces a set of chi2 values for every element in a grid. While the smallest chi2 value determines the best fit to the test spectrum, there exists other grid elements that reasonably fit the test spectrum according to their chi2 values. The collection of these grid elements help determine the parameter measurement uncertainty, and we represent this using "sensitivity regions" in 2D spectral parameter space. We determine the sensitivity regions by placing a cut of chi2 = 4.61 corresponding to a 90% coverage probability for two free parameters. 
+
+Scripts in the code_asimov directory:
+=====================================
+The code_asimov directory contains the code to produce and show plots for Asimov method. Run scripts from the main directory, for example
+	root -l code_asimov/AsimovStudy.C
+
+Produce chi2-minimized flux parameter measurements and plots for different combinations of grid and test spectrum assumptions (AsimovStudy, CrossSectionModelStudies_AutomatedAsimov, MassOrderingStudies_AutomatedAsimov, ResolutionVsDistanceStudy_AutomatedAsimov, SmearingStudies_AutomatedAsimov, StepEfficStudy_AutomatedAsimov, SupernovaDistanceStudy_AutomatedAsimov)
+
+Store specific spectra and results with AutomatedSaveBestFitElement
+
+"Fake supernova" method:
+========================
+To study how a neutrino detector will constrain the parameter measurement in the presence of statistical fluctuations, we generate a test spectrum by randomly sampling from a spectrum for a supernova at a given distance and a "true" set of pinched-thermal parameters (alpha, e0, luminosity). Since the test spectrum cannot correspond to a grid element, we can use it to study the effectiveness and the accuracy of the fitting algorithm.
+
+Inputting many randomly sampled test spectra (or "fake supernovae") into the forward fitting algorithm produces a distribution of best-fit parameter measurements. Similar to the Asimov study, we can visually represent this distribution by drawing sensitivity regions in 2D parameter space. In this study, the boundaries correspond to 90% of the fake supernovae spectra. 
+
+Run the script from the main directory, for example
+	root -l code_stat/GenerateSupernovaEvents.c
+
+
+
