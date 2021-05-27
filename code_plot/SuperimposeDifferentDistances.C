@@ -78,7 +78,7 @@ void SuperimposeDifferentDistances(){
 		files.emplace_back(tmp);
 	}
 	
-	TString gridinfo = "input/grid_info/grid_info.dat";
+	TString gridinfo = "input/grid_info/grid_info_"+grid+".dat";
     
 	//set specific aesthetic things here 
 	gStyle->SetOptStat(0);
