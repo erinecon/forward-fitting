@@ -6,6 +6,61 @@
 #ifndef ForwardFit_h
 #define ForwardFit_h
 
+#define FOR(i, size) for (int i = 0; i < size; ++i)
+
+void SetColorScale(TH2* h)
+{
+    const int NCONTOURS = 256;
+    
+    // new full palette - red-white-blue
+    // symmetric around 0
+    const Int_t Number = 3;
+    Double_t Red[Number]    = { 0.00, 1.00, 1.00};
+    Double_t Green[Number]  = { 0.00, 1.00, 0.00};
+    Double_t Blue[Number]   = { 1.00, 1.00, 0.00};
+    Double_t Length[Number] = { 0.00, 0.50, 1.00 };
+    
+    //const Int_t Number = 9;
+    //Double_t Red[Number]    = { 0.2082, 0.0592, 0.0780, 0.0232, 0.1802, 0.5301, 0.8186, 0.9956, 0.9764};
+    //Double_t Green[Number]  = { 0.1664, 0.3599, 0.5041, 0.6419, 0.7178, 0.7492, 0.7328, 0.7862, 0.9832};
+    //Double_t Blue[Number]   = { 0.5293, 0.8684, 0.8385, 0.7914, 0.6425, 0.4662, 0.3499, 0.1968, 0.0539};
+    //Double_t Length[Number] = {0.0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1.00};
+    
+    Int_t nb=NCONTOURS;
+    Int_t index = TColor::CreateGradientColorTable(Number,Length,Red,Green,Blue,nb);
+    
+    Int_t MyPalette[NCONTOURS];
+    FOR(i, NCONTOURS)
+    MyPalette[i] = index+i;
+    
+    // Get scale from the histogram
+    double low = h->GetMinimum();
+    double hi = h->GetMaximum();
+    double full_scale = 2*max(abs(hi), abs(low));
+    
+    // Get new bounds
+    auto color_min = gROOT->GetColor(index + (0.5+low/full_scale)*NCONTOURS);
+    auto color_max = gROOT->GetColor(index + (0.5+hi/full_scale) *NCONTOURS - 1);
+    
+    // Change the extreme colours of the new palette
+    Red[0] = color_min->GetRed(); Green[0] = color_min->GetGreen(); Blue[0] = color_min->GetBlue();
+    Red[Number-1] = color_max->GetRed(); Green[Number-1] = color_max->GetGreen(); Blue[Number-1] = color_max->GetBlue();
+    
+    // Set position of 0
+    Length[1] = abs(low)/(hi-low);
+    //Length[2] = abs(low)/(hi-low);
+    
+    // Build the new palette with offset
+    index = TColor::CreateGradientColorTable(Number,Length,Red,Green,Blue,nb);
+    FOR(i, NCONTOURS)
+    MyPalette[i] = index+i;
+    
+    // set it as default
+    TColor::SetPalette(NCONTOURS, MyPalette);
+    // set number of colors used by the histogram
+    h->SetContour(NCONTOURS);
+}
+
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // getReferenceContourAreas: Open the file with reference contour areas and
 //                           store the values in ref_alphavse0, ref_lumvse0, and
@@ -31,29 +86,51 @@ void getReferenceContourAreas(Double_t distanceSN, TString grid, TString grid_xs
     
 }
 
+
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-// findCorrectGridForCombo: For a given list of grids, search for ROOT file of
-//                          chi2 plots and contours and output the file name
-//                          if the file exists
+// findMinMaxLumVals: For a given list of grids, search for and output the
+//                    minimum and maximum luminosity values
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-TString findCorrectGridForCombo(TString directory, std::vector<TString> grids, TString grid_options, TString ts_options, TString distanceSN){
+void findMinMaxLumVals(std::vector<TString> grids, Double_t &min_lum, Double_t &max_lum){
     
-    //this needs to find the correct file name for a certain grid/ts combination
-    TString actualfilename = "NULL";
+    min_lum = 100000000.;
+    max_lum = 0.;
     
     for(size_t i = 0; i < grids.size(); ++i){
-        TString filename = directory + "chi2plots_" + grids[i] + "_smear" + grid_options + "_spectra" + ts_options + "_" + distanceSN + ".root";
-        //check if this filename exists
         
+        TString gridinfo = "input/grid_info/grid_info_" + grids[i] + ".dat";
         
-        ifstream ifile(filename);
-        if(ifile) return filename;
+        //define the bounds of the grid
+        Double_t first_alpha;
+        Double_t last_alpha;
+        Double_t step_alpha;
         
+        Double_t first_e0;
+        Double_t last_e0;
+        Double_t step_e0;
         
-    }
-    
-    return actualfilename;
+        Double_t factor = 1e53;
+        Double_t first_lum;
+        Double_t last_lum;
+        Double_t step_lum;
+        
+        //open grid_info.dat
+        ifstream gin;
+        gin.open(gridinfo);
+        
+        while(1){
+            gin >> first_alpha >> last_alpha >> step_alpha >> first_e0 >> last_e0 >> step_e0 >> first_lum >> last_lum >> step_lum;
+            if(!gin.good()) break;
+            
+            if(first_lum < min_lum) min_lum = first_lum;
+            if(last_lum > max_lum) max_lum = last_lum;
+            
+        }
+        
+        gin.close();
+        
+    } //end loop over grids
     
 }
 
@@ -151,6 +228,46 @@ std::vector<std::vector<double>> getManyParameters(std::vector<TString> files, T
     }
     
     return values;
+}
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// findCorrectGridForCombo: For a given list of grids, search for ROOT file of
+//                          chi2 plots and contours and output the file name
+//                          if the file exists
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+TString findCorrectGridForCombo(TString directory, std::vector<TString> grids, TString grid_options, TString ts_options, TString distanceSN){
+    
+    //this needs to find the correct file name for a certain grid/ts combination
+    TString actualfilename = "NULL";
+    double chi2min = 1000000;
+    
+    for(size_t i = 0; i < grids.size(); ++i){
+        TString filename = directory + "chi2plots_" + grids[i] + "_smear" + grid_options + "_spectra" + ts_options + "_" + distanceSN + ".root";
+        //check if this filename exists
+        
+        
+        ifstream ifile(filename);
+        if(!ifile) continue;
+            
+        //find file with lowest chi2
+        std::vector<double> tmp_chi2 = getParameter(filename, "chi2");
+        if(tmp_chi2[0] < chi2min){
+            chi2min = tmp_chi2[0];
+            actualfilename = filename;
+        }
+            
+        //return filename;
+        
+        
+    }
+    
+    if(actualfilename == "NULL") std::cout << "File for grid options " << grid_options << " and test spectrum options " << ts_options << " not found." << std::endl;
+    
+    //std::cout << "best filename: " << actualfilename << " " << chi2min << std::endl;
+    
+    return actualfilename;
+    
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
